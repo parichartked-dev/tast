@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>รายงานรายรับ-รายจ่าย ปีงบประมาณ 2569</title>
+    <!-- นำเข้าฟอนต์ Sarabun และไลบรารีภายนอก SheetJS กับ Chart.js ผ่าน CDN -->
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --color-yellow: #FFC72C;
+            --color-orange: #FA4616;
+            --color-gray: #7B8189;
+            --color-bg: #F8F9FA;
+            --color-card: #FFFFFF;
+            --color-text: #212529;
+            --color-border: #DEE2E6;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Sarabun', sans-serif;
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        /* ส่วนอัปโหลดไฟล์เริ่มต้น */
+        #upload-container {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(248, 249, 250, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            padding: 20px;
+            text-align: center;
+        }
+        .upload-card {
+            background: var(--color-card);
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            border-top: 6px solid var(--color-orange);
+            max-width: 500px;
+            width: 100%;
+        }
+        .upload-card h1 { font-size: 24px; margin-bottom: 12px; color: var(--color-text); }
+        .upload-card p { font-size: 16px; color: var(--color-gray); margin-bottom: 24px; }
+        .file-input-wrapper {
+            border: 2px dashed var(--color-gray);
+            padding: 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .file-input-wrapper:hover { border-color: var(--color-orange); background: rgba(250, 70, 22, 0.02); }
+        input[type="file"] { display: none; }
+        .btn-upload {
+            background: var(--color-orange);
+            color: #fff;
+            padding: 10px 24px;
+            border: none;
+            border-radius: 6px;
+            font-family: 'Sarabun', sans-serif;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-top: 12px;
+        }
+        /* กล่องแจ้งเตือนความผิดพลาด */
+        #error-container {
+            margin-top: 20px;
+            max-height: 150px;
+            overflow-y: auto;
+            text-align: left;
+            font-size: 14px;
+            color: #D9534F;
+            display: none;
+            background: #FFF5F5;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #FA8072;
+        }
+        /* โครงสร้างสไลด์หลัก */
+        #presentation {
+            flex: 1;
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: none;
+        }
+        .slide {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            padding: 40px 60px;
+            display: flex;
+            flex-direction: column;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s ease-in-out;
+        }
+        .slide.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .slide-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--color-border);
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+        .slide-header h2 { font-size: 26px; color: var(--color-text); font-weight: 700; }
+        .slide-header span { font-size: 14px; color: var(--color-gray); background: #E9ECEF; padding: 4px 10px; border-radius: 20px; }
+        .slide-body { flex: 1; display: flex; flex-direction: column; gap: 20px; overflow: hidden; }
+        
+        /* ควบคุมแถบนำทางด้านล่าง */
+        .slide-footer {
+            height: 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 1px solid var(--color-border);
+            font-size: 14px;
+            color: var(--color-gray);
+            padding: 0 10px;
+        }
+
+        /* เลย์เอาต์ภายในสไลด์ */
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; height: 100%; }
+        .card { background: var(--color-card); padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); display: flex; flex-direction: column; justify-content: center; }
+        .kpi-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 10px; }
+        .kpi-box { background: var(--color-card); padding: 15px; border-radius: 8px; border-left: 5px solid var(--color-orange); box-shadow: 0 2px 6px rgba(0,0,0,0.04); }
+        .kpi-box.yellow { border-left-color: var(--color-yellow); }
+        .kpi-box.gray { border-left-color: var(--color-gray); }
+        .kpi-title { font-size: 14px; color: var(--color-gray); }
+        .kpi-value { font-size: 22px; font-weight: 700; color: var(--color-text); margin-top: 5px; }
+        
+        /* ตารางและข้อความสรุป */
+        table.styled-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        table.styled-table th, table.styled-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--color-border); }
+        table.styled-table th { background: #F1F3F5; font-weight: 600; }
+        .highlight-warn { color: #D9534F; font-weight: bold; background: #FFF5F5; padding: 2px 6px; border-radius: 4px; }
+        .highlight-over { color: #FA4616; font-weight: bold; }
+        .chart-container { position: relative; flex: 1; width: 100%; max-height: 380px; display: flex; justify-content: center; align-items: center; }
+        .chart-legend-note { font-size: 12px; color: var(--color-gray); text-align: center; margin-top: 4px; }
+        
+        /* หน้าแรก Title Slide */
+        .title-slide-content {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            text-align: center;
+            gap: 20px;
+        }
+        .title-slide-content h1 { font-size: 40px; color: var(--color-text); font-weight: 700; }
+        .title-slide-content p { font-size: 20px; color: var(--color-gray); }
+        .badge-config { background: var(--color-yellow); color: #000; padding: 6px 16px; border-radius: 4px; font-weight: 600; font-size: 16px; }
+    </style>
+</head>
+<body>
+
+    <!-- หน้าต่างอัปโหลดไฟล์ Excel เริ่มต้น -->
+    <div id="upload-container">
+        <div class="upload-card">
+            <h1>รายงานรายรับ-รายจ่าย</h1>
+            <p>ประจำปีงบประมาณ 2569</p>
+            <label class="file-input-wrapper" id="drop-zone">
+                <span id="file-label">คลิกหรือลากไฟล์ data.xlsx มาวางที่นี่</span>
+                <input type="file" id="excel-file" accept=".xlsx, .xls">
+            </label>
+            <br>
+            <button class="btn-upload" onclick="processExcel()">ประมวลผลข้อมูล</button>
+            <div id="error-container"></div>
+        </div>
+    </div>
+
+    <!-- ส่วนแสดงผลสไลด์พรีเซนต์เตชัน -->
+    <div id="presentation">
+
+        <!-- สไลด์ 1: หน้าแรก (Title Slide) -->
+        <section class="slide active" id="slide-1">
+            <div class="slide-header">
+                <h2>ภาพรวมโครงการ</h2>
+                <span>สไลด์ 1 / 6</span>
+            </div>
+            <div class="slide-body">
+                <div class="title-slide-content">
+                    <div class="badge-config">ปีงบประมาณ 2569</div>
+                    <h1 id="main-title">รายงานรายรับ-รายจ่าย ปีงบประมาณ 2569</h1>
+                    <p>สรุปผลการดำเนินงานสิ้นปีงบประมาณ สำหรับผู้บริหาร (เวลา 10 นาที)</p>
+                    <p style="font-size: 14px; color: var(--color-gray); margin-top: 40px;">ใช้ปุ่มลูกศรซ้าย/ขวา บนคีย์บอร์ดเพื่อเปลี่ยนสไลด์</p>
+                </div>
+            </div>
+            <div class="slide-footer">
+                <span>ระบบรายงานผู้บริหาร</span>
+                <span>กดปุ่มลูกศรเพื่อไปต่อ &rarr;</span>
+            </div>
+        </section>
+
+        <!-- สไลด์ 2: ภาพรวมรายรับ-รายจ่ายและกระแสเงินสดสะสม -->
+        <section class="slide" id="slide-2">
+            <div class="slide-header">
+                <h2>ภาพรวมรายรับ-รายจ่ายและกระแสเงินสดสะสม</h2>
+                <span>สไลด์ 2 / 6</span>
+            </div>
+            <div class="slide-body">
+                <div class="kpi-container">
+                    <div class="kpi-box">
+                        <div class="kpi-title">รายรับรวม (ปี 2569)</div>
+                        <div class="kpi-value" id="kpi-rev">0.00 ล้านบาท</div>
+                    </div>
+                    <div class="kpi-box yellow">
+                        <div class="kpi-title">รายจ่ายรวม (ปี 2569)</div>
+                        <div class="kpi-value" id="kpi-exp">0.00 ล้านบาท</div>
+                    </div>
+                    <div class="kpi-box gray">
+                        <div class="kpi-title">เงินสดสุทธิ (Net Cash Flow)</div>
+                        <div class="kpi-value" id="kpi-net">0.00 ล้านบาท</div>
+                    </div>
+                </div>
+                <div class="card" style="flex: 1;">
+                    <div class="chart-container">
+                        <canvas id="cashflowChart"></canvas>
+                    </div>
+                    <div class="chart-legend-note">แสดงเปรียบเทียบรายรับ-รายจ่ายรายเดือน และเส้นยอดเงินสดสะสมสะท้อนภาวะขาดดุล</div>
+                </div>
+            </div>
+            <div class="slide-footer">
+                <span>&larr; หน้าก่อนหน้า</span>
+                <span>หน้า 2 จาก 6</span>
+            </div>
+        </section>
+
+        <!-- สไลด์ 3: ประสิทธิภาพการเบิกจ่ายงบประมาณเทียบกับแผนรายหน่วยงาน -->
+        <section class="slide" id="slide-3">
+            <div class="slide-header">
+                <h2>ประสิทธิภาพการเบิกจ่ายงบประมาณเทียบกับแผนรายหน่วยงาน</h2>
+                <span>สไลด์ 3 / 6</span>
+            </div>
+            <div class="slide-body">
+                <div class="grid-2">
+                    <div class="card">
+                        <div class="chart-container">
+                            <canvas id="budgetChart"></canvas>
+                        </div>
+                        <div class="chart-legend-note">สีส้มปกติ, <span style="color:#D9534F; font-weight:bold;">ต่ำกว่า 50%</span>, เกิน 100% ระบุชัดเจน</div>
+                    </div>
+                    <div class="card" style="overflow-y: auto;">
+                        <table class="styled-table" id="budget-table">
+                            <thead>
+                                <tr>
+                                    <th>หน่วยงาน</th>
+                                    <th>เบิกจ่ายจริง (ล้าน)</th>
+                                    <th>แผน (ล้าน)</th>
+                                    <th>อัตรา (%)</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="slide-footer">
+                <span>&larr; หน้าก่อนหน้า</span>
+                <span>หน้า 3 จาก 6</span>
+            </div>
+        </section>
+
+        <!-- สไลด์ 4: การวิเคราะห์หมวดหมู่รายจ่ายสูงสุดและสัดส่วนต้นทุน -->
+        <section class="slide" id="slide-4">
+            <div class="slide-header">
+                <h2>การวิเคราะห์หมวดหมู่รายจ่ายสูงสุดและสัดส่วนต้นทุน</h2>
+                <span>สไลด์ 4 / 6</span>
+            </div>
+            <div class="slide-body">
+                <div class="grid-2">
+                    <div class="card">
+                        <div class="chart-container">
+                            <canvas id="categoryChart"></canvas>
+                        </div>
+                        <div class="chart-legend-note">สัดส่วนหมวดหมู่รายจ่ายหลักประจำปีงบประมาณ 2569</div>
+                    </div>
+                    <div class="card" style="overflow-y: auto;">
+                        <table class="styled-table" id="category-table">
+                            <thead>
+                                <tr>
+                                    <th>หมวดรายจ่าย</th>
+                                    <th>จำนวนเงิน (ล้านบาท)</th>
+                                    <th>สัดส่วน (%)</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="slide-footer">
+                <span>&larr; หน้าก่อนหน้า</span>
+                <span>หน้า 4 จาก 6</span>
+            </div>
+        </section>
+
+        <!-- สไลด์ 5: รายการกลับรายการและแจ้งเตือนรายการนอกรอบปีงบประมาณ -->
+        <section class="slide" id="slide-5">
+            <div class="slide-header">
+                <h2>รายการกลับรายการ (ยอดติดลบ) และรายการนอกรอบปีงบประมาณ</h2>
+                <span>สไลด์ 5 / 6</span>
+            </div>
+            <div class="slide-body">
+                <div class="grid-2">
+                    <div class="card">
+                        <h3 style="font-size: 16px; margin-bottom: 10px; color: var(--color-orange);">สถิติรายการกลับรายการ (Reversal)</h3>
+                        <div class="chart-container">
+                            <canvas id="reversalChart"></canvas>
+                        </div>
+                        <div class="chart-legend-note">มูลค่ารายการติดลบที่นำมาหักกลบในแต่ละเดือน</div>
+                    </div>
+                    <div class="card" style="justify-content: flex-start; overflow-y: auto;">
+                        <h3 style="font-size: 16px; margin-bottom: 10px; color: var(--color-text);">รายงานแจ้งเตือนความผิดปกติ</h3>
+                        <div id="warning-report-box" style="font-size: 14px; line-height: 1.6; color: var(--color-text);">
+                            <!-- เติมข้อมูลแจ้งเตือนด้วย JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="slide-footer">
+                <span>&larr; หน้าก่อนหน้า</span>
+                <span>หน้า 5 จาก 6</span>
+            </div>
+        </section>
+
+        <!-- สไลด์ 6: หน้าสรุปและข้อเสนอแนะเชิงบริหาร -->
+        <section class="slide" id="slide-6">
+            <div class="slide-header">
+                <h2>สรุปประเด็นสำคัญและข้อเสนอแนะเชิงบริหาร</h2>
+                <span>สไลด์ 6 / 6</span>
+            </div>
+            <div class="slide-body">
+                <div class="grid-2">
+                    <div class="card" style="gap: 15px; border-left: 6px solid var(--color-orange);">
+                        <h3 style="font-size: 18px; color: var(--color-orange);">Key Takeaways (สรุปประเด็นหลัก)</h3>
+                        <p style="font-size: 15px; line-height: 1.6;">1. <strong>ภาพรวมการเงินสุทธิ:</strong> ภาพรวมปีงบประมาณ 2569 มีกระแสเงินสดอยู่ในเกณฑ์ที่บริหารจัดการได้ แต่ต้องเฝ้าระวังช่วงไตรมาสที่มีภาวะเงินสดตึงตัวสะสม</p>
+                        <p style="font-size: 15px; line-height: 1.6;">2. <strong>ประสิทธิภาพการเบิกจ่าย:</strong> มีหน่วยงานบางแห่งที่เบิกจ่ายต่ำกว่าเกณฑ์ 50% และเกิน 100% ซึ่งต้องติดตามการใช้งบประมาณอย่างใกล้ชิด</p>
+                        <p style="font-size: 15px; line-height: 1.6;">3. <strong>ความโปร่งใสทางบัญชี:</strong> ตรวจพบรายการกลับรายการและรายการนอกรอบปีงบประมาณ ซึ่งระบบได้ทำการแจ้งเตือนเพื่อปรับปรุงตัวเลขให้ถูกต้องสมบูรณ์</p>
+                    </div>
+                    <div class="card" style="gap: 15px; border-left: 6px solid var(--color-yellow); background: #FFFDF5;">
+                        <h3 style="font-size: 18px; color: #D48806;">ข้อเสนอแนะสำหรับการจัดทำงบประมาณปีถัดไป</h3>
+                        <p style="font-size: 15px; line-height: 1.6;">• <strong>มาตรการเร่งรัดการเบิกจ่าย:</strong> กำหนดมาตรการช่วยเหลือและติดตามหน่วยงานที่มีอัตราเบิกจ่ายต่ำกว่า 50% ให้ดำเนินโครงการได้ตามแผน</p>
+                        <p style="font-size: 15px; line-height: 1.6;">• <strong>การควบคุมหมวดรายจ่ายหลัก:</strong> ควบคุมและทบทวนหมวดค่าใช้จ่ายที่มีสัดส่วนสูงสุดเพื่อลดต้นทุนที่ไม่จำเป็น</p>
+                        <p style="font-size: 15px; line-height: 1.6;">• <strong>การตรวจสอบความถูกต้องของเอกสาร:</strong> ลดความผิดพลาดในการบันทึกบัญชีและการบันทึกรายการเหลื่อื่อมปีงบประมาณ</p>
+                    </div>
+                </div>
+            </div>
+            <div class="slide-footer">
+                <span>&larr; หน้าก่อนหน้า</span>
+                <span>สิ้นสุดการนำเสนอ</span>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- ส่วนสคริปต์การทำงานหลักตามสถาปัตยกรรมที่กำหนด -->
+    <script>
+        // CONFIG พื้นฐานของระบบ
+        const CONFIG = {
+            title: "รายงานรายรับ-รายจ่าย ปีงบประมาณ 2569",
+            unitName: "ล้านบาท",
+            fiscalYear: 2026, // ปีงบประมาณหลักในการแสดงผลเปรียบเทียบ
+            thresholdPercent: 50
+        };
+
+        let currentSlide = 1;
+        const totalSlides = 6;
+        let globalProcessedData = null;
+        let chartsInstance = {};
+
+        // ฟังก์ชันแปลงเลขซีเรียลวันที่ของ Excel เป็น JavaScript Date โดยไม่ให้เขตเวลาทำให้เดือนเลื่อน
+        function excelDateToJSDate(serial) {
+            if (typeof serial === 'number') {
+                const utc_days = Math.floor(serial - 25569);
+                const utc_value = utc_days * 86400;
+                const date_info = new Date(utc_value * 1000);
+                return new Date(date_info.getUTCFullYear(), date_info.getUTCMonth(), date_info.getUTCDate());
+            }
+            return new Date(serial);
+        }
+
+        // ฟังก์ชันกำหนดปีงบประมาณ (ปีงบเริ่ม 1 ต.ค. ของปีก่อนหน้า)
+        function getFiscalYear(dateObj) {
+            const month = dateObj.getMonth() + 1; // 1-12
+            const year = dateObj.getFullYear();
+            return month >= 10 ? year + 1 : year;
+        }
+
+        // 1. ส่วน อ่าน / ตรวจ (Read & Validate)
+        document.getElementById('excel-file').addEventListener('change', function(e) {
+            if(e.target.files.length > 0) {
+                document.getElementById('file-label').innerText = e.target.files[0].name;
+            }
+        });
+
+        function processExcel() {
+            const fileInput = document.getElementById('excel-file');
+            const errorContainer = document.getElementById('error-container');
+            errorContainer.innerHTML = '';
+            errorContainer.style.display = 'none';
+
+            if(fileInput.files.length === 0) {
+                alert('กรุณาเลือกไฟล์ data.xlsx ก่อนประมวลผล');
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    
+                    let validationErrors = [];
+
+                    // ตรวจสอบชีต Transactions
+                    if(!workbook.Sheets['Transactions']) {
+                        validationErrors.push("ไม่พบชีตชื่อ 'Transactions' ในไฟล์ Excel");
+                    }
+                    // ตรวจสอบชีต Budget
+                    if(!workbook.Sheets['Budget']) {
+                        validationErrors.push("ไม่พบชีตชื่อ 'Budget' ในไฟล์ Excel");
+                    }
+
+                    if(validationErrors.length > 0) {
+                        showErrors(validationErrors);
+                        return;
+                    }
+
+                    const transJson = XLSX.utils.sheet_to_json(workbook.Sheets['Transactions']);
+                    const budgetJson = XLSX.utils.sheet_to_json(workbook.Sheets['Budget']);
+
+                    // ตรวจสอบคอลัมน์และความถูกต้องของชนิดข้อมูลแถวต่อแถว
+                    transJson.forEach((row, index) => {
+                        const rowNum = index + 2; // แดดชีตเริ่มแถว 2 (รวมหัวตาราง)
+                        if(row.date === undefined) {
+                            validationErrors.push(`ชีต Transactions แถวที่ ${rowNum}: ขาดคอลัมน์ 'date'`);
+                        }
+                        if(row.type !== 'รายรับ' && row.type !== 'รายจ่าย') {
+                            validationErrors.push(`ชีต Transactions แถวที่ ${rowNum}: คอลัมน์ 'type' ต้องเป็น 'รายรับ' หรือ 'รายจ่าย' (พบค่า: ${row.type})`);
+                        }
+                        if(typeof row.amount !== 'number') {
+                            validationErrors.push(`ชีต Transactions แถวที่ ${rowNum}: คอลัมน์ 'amount' ต้องเป็นตัวเลข`);
+                        }
+                    });
+
+                    if(validationErrors.length > 0) {
+                        showErrors(validationErrors);
+                        return;
+                    }
+
+                    // ผ่านการตรวจสอบ ดำเนินการขั้นตอนต่อไป
+                    runDataProcessing(transJson, budgetJson);
+
+                } catch (err) {
+                    console.error(err);
+                    showErrors(["เกิดข้อผิดพลาดในการอ่านไฟล์ Excel: รูปแบบไฟล์ไม่ถูกต้อง"]);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function showErrors(errors) {
+            const errorContainer = document.getElementById('error-container');
+            errorContainer.innerHTML = "<b>พบข้อผิดพลาดในการตรวจสอบข้อมูล:</b><br>" + errors.join("<br>");
+            errorContainer.style.display = 'block';
+        }
+
+        // 2. ส่วน สรุปยอด (Summary)
+        function runDataProcessing(transData, budgetData) {
+            let warnings = [];
+            let validTransactions = [];
+            let outOfFiscalRangeCount = 0;
+            let outOfFiscalRangeAmount = 0;
+            let budgetUnits = new Set(budgetData.map(b => b.unit));
+            let transUnitsWithoutBudget = new Set();
+
+            // รวบรวมข้อมูลและตรวจสอบเงื่อนไขรอบปีงบประมาณ (2568-2569)
+            transData.forEach(row => {
+                const dateObj = excelDateToJSDate(row.date);
+                const fYear = getFiscalYear(dateObj);
+                
+                // ตรวจสอบว่า unit มีอยู่ใน Budget หรือไม่
+                if(!budgetUnits.has(row.unit)) {
+                    transUnitsWithoutBudget.add(row.unit);
+                }
+
+                // ตรวจสอบรายการนอกปีงบ 2568-2569
+                if(fYear < 2568 || fYear > 2569) {
+                    outOfFiscalRangeCount++;
+                    outOfFiscalRangeAmount += Number(row.amount);
+                    return; // ไม่นำมารวมยอดหลัก แต่เก็บสถิติแจ้งเตือน
+                }
+
+                validTransactions.push({
+                    date: dateObj,
+                    fiscalYear: fYear,
+                    month: dateObj.getMonth() + 1, // 1-12
+                    doc_no: row.doc_no,
+                    type: row.type,
+                    category: row.category || 'อื่นๆ',
+                    unit: row.unit,
+                    amount: Number(row.amount), // ยอดติดลบคือกลับรายการ หักในเดือนที่บันทึก
+                    description: row.description
+                });
+            });
+
+            if(transUnitsWithoutBudget.size > 0) {
+                warnings.push(`เตือน: พบหน่วยงาน (Unit) ใน Transactions จำนวน ${transUnitsWithoutBudget.size} หน่วย ที่ไม่มีข้อมูลอยู่ในชีต Budget (${Array.from(transUnitsWithoutBudget).join(', ')})`);
+            }
+            if(outOfFiscalRangeCount > 0) {
+                warnings.push(`เตือน: พบรายการนอกปีงบประมาณ 2568-2569 จำนวน ${outOfFiscalRangeCount} รายการ (มูลค่ารวม ${formatMillion(outOfFiscalRangeAmount)} ล้านบาท) ซึ่งถูกยกเว้นไม่นำมารวมในงบปัจจุบัน`);
+            }
+
+            // 3. ส่วน คำนวณ (Calculation)
+            // คำนวณภาพรวมแยกตามปีงบประมาณ (มุ่งเน้นปี 2569 เทียบ 2568)
+            let summaryByYear = {
+                2568: { rev: 0, exp: 0 },
+                2569: { rev: 0, exp: 0 }
+            };
+
+            let monthlyData2569 = {}; // เก็บรายรับ รายจ่าย แยกตามเดือน (1-12, โดยเริ่ม ต.ค. เป็นเดือนที่ 1 ของปีงบ)
+            for(let i=1; i<=12; i++) {
+                monthlyData2569[i] = { rev: 0, exp: 0, net: 0 };
+            }
+
+            let categoryExpenses2569 = {};
+            let unitExpenses2569 = {};
+            let reversalByMonth2569 = {};
+            for(let i=1; i<=12; i++) { reversalByMonth2569[i] = 0; }
+
+            validTransactions.forEach(t => {
+                if(summaryByYear[t.fiscalYear]) {
+                    if(t.type === 'รายรับ') summaryByYear[t.fiscalYear].rev += t.amount;
+                    if(t.type === 'รายจ่าย') summaryByYear[t.fiscalYear].exp += t.amount;
+                }
+
+                if(t.fiscalYear === 2569) {
+                    // แปลงเดือนปฏิทินให้เป็นเดือนตามปีงบประมาณ (ต.ค.=1, พ.ย.=2, ..., ก.ย.=12)
+                    let fiscalMonth = t.month >= 10 ? t.month - 9 : t.month + 3;
+
+                    if(t.type === 'รายรับ') {
+                        monthlyData2569[fiscalMonth].rev += t.amount;
+                    } else if(t.type === 'รายจ่าย') {
+                        monthlyData2569[fiscalMonth].exp += t.amount;
+                        
+                        // จัดกลุ่มตามหมวดหมู่รายจ่าย
+                        categoryExpenses2569[t.category] = (categoryExpenses2569[t.category] || 0) + t.amount;
+                        
+                        // จัดกลุ่มรายจ่ายตามหน่วยงาน
+                        unitExpenses2569[t.unit] = (unitExpenses2569[t.unit] || 0) + t.amount;
+                    }
+
+                    // ตรวจสอบรายการติดลบ (กลับรายการ)
+                    if(t.amount < 0) {
+                        reversalByMonth2569[fiscalMonth] += Math.abs(t.amount);
+                    }
+                }
+            });
+
+            // คำนวณยอดรวมรายจ่ายทั้งหมดเพื่อตรวจสอบกับผลรวมรายหน่วย
+            let totalExpenseSumFromUnits = Object.values(unitExpenses2569).reduce((a, b) => a + b, 0);
+            let totalExpenseFromGlobal = summaryByYear[2569].exp;
+            if(Math.abs(totalExpenseSumFromUnits - totalExpenseFromGlobal) > 0.01) {
+                warnings.push(`เตือน: ผลรวมเบิกจ่ายจริงรายหน่วย (${formatMillion(totalExpenseSumFromUnits)} ล้านบาท) ไม่เท่ากับยอดรายจ่ายรวมทั้งหมด (${formatMillion(totalExpenseFromGlobal)} ล้านบาท)`);
+            }
+
+            globalProcessedData = {
+                summaryByYear,
+                monthlyData2569,
+                categoryExpenses2569,
+                unitExpenses2569,
+                reversalByMonth2569,
+                budgetData,
+                warnings
+            };
+
+            // 4. ส่วน แสดงผล (Rendering UI & Charts)
+            renderPresentation();
+        }
+
+        function formatMillion(val) {
+            return (val / 1000000).toFixed(2);
+        }
+
+        // แปลงหน่วยเป็นล้านบาทและวาดกราฟ/ตารางลงในสไลด์
+        function renderPresentation() {
+            document.getElementById('upload-container').style.display = 'none';
+            document.getElementById('presentation').style.display = 'block';
+
+            const data = globalProcessedData;
+
+            // เติมข้อมูลสไลด์ 2 (ภาพรวม)
+            const rev26 = data.summaryByYear[2569].rev;
+            const exp26 = data.summaryByYear[2569].exp;
+            const net26 = rev26 - exp26;
+
+            document.getElementById('kpi-rev').innerText = formatMillion(rev26) + ' ล้านบาท';
+            document.getElementById('kpi-exp').innerText = formatMillion(exp26) + ' ล้านบาท';
+            document.getElementById('kpi-net').innerText = formatMillion(net26) + ' ล้านบาท';
+
+            // วาดกราฟกระแสเงินสดรายเดือน (สไลด์ 2)
+            let monthsLabel = ['ต.ค.', 'พ.ย.', 'ธ.ค.', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.'];
+            let revArr = [], expArr = [], cumNetArr = [];
+            let runningNet = 0;
+
+            for(let i=1; i<=12; i++) {
+                let r = data.monthlyData2569[i].rev / 1000000;
+                let ex = data.monthlyData2569[i].exp / 1000000;
+                revArr.push(r);
+                expArr.push(ex);
+                runningNet += (r - ex);
+                cumNetArr.push(runningNet);
+            }
+
+            if(chartsInstance.cashflow) chartsInstance.cashflow.destroy();
+            chartsInstance.cashflow = new Chart(document.getElementById('cashflowChart'), {
+                type: 'bar',
+                data: {
+                    labels: monthsLabel,
+                    datasets: [
+                        { label: 'รายรับ (ล้านบาท)', data: revArr, backgroundColor: '#FFC72C', order: 2 },
+                        { label: 'รายจ่าย (ล้านบาท)', data: expArr, backgroundColor: '#FA4616', order: 2 },
+                        { label: 'เงินสดสะสม (ล้านบาท)', data: cumNetArr, type: 'line', borderColor: '#7B8189', borderWidth: 2, fill: false, order: 1 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false, // ปิด animation ตามข้อกำหนด
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+
+            // เติมข้อมูลสไลด์ 3 (เบิกจ่ายเทียบแผนรายหน่วยงาน)
+            let budgetTableBody = document.querySelector('#budget-table tbody');
+            budgetTableBody.innerHTML = '';
+            let budgetUnitsLabel = [];
+            let actualExpArr = [];
+            let planArr = [];
+
+            data.budgetData.forEach(b => {
+                let actual = (data.unitExpenses2569[b.unit] || 0);
+                let actualMil = actual / 1000000;
+                let planMil = b.plan / 1000000;
+                let pct = planMil > 0 ? (actual / b.plan) * 100 : 0;
+
+                budgetUnitsLabel.push(b.unit);
+                actualExpArr.push(actualMil);
+                planArr.push(planMil);
+
+                let tr = document.createElement('tr');
+                let pctClass = '';
+                if(pct < CONFIG.thresholdPercent) pctClass = 'highlight-warn';
+                if(pct > 100) pctClass = 'highlight-over';
+
+                tr.innerHTML = `
+                    <td>${b.unit}</td>
+                    <td>${actualMil.toFixed(2)}</td>
+                    <td>${planMil.toFixed(2)}</td>
+                    <td class="${pctClass}">${pct.toFixed(1)}% ${pct > 100 ? '(เกินแผน)' : ''}</td>
+                `;
+                budgetTableBody.appendChild(tr);
+            });
+
+            if(chartsInstance.budget) chartsInstance.budget.destroy();
+            chartsInstance.budget = new Chart(document.getElementById('budgetChart'), {
+                type: 'bar_horizontal' in Chart.registry.controllers ? 'bar_horizontal' : 'bar', // ตรวจสอบชนิดกราฟแนวนอน
+                data: {
+                    labels: budgetUnitsLabel,
+                    datasets: [
+                        { label: 'เบิกจ่ายจริง (ล้านบาท)', data: actualExpArr, backgroundColor: '#FA4616' },
+                        { label: 'แผนงบประมาณ (ล้านบาท)', data: planArr, backgroundColor: '#7B8189' }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y', // กำหนดเป็นกราฟแนวนอน
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+
+            // เติมข้อมูลสไลด์ 4 (หมวดหมู่รายจ่ายสูงสุด)
+            let categoryTableBody = document.querySelector('#category-table tbody');
+            categoryTableBody.innerHTML = '';
+            let catLabels = [];
+            let catValues = [];
+            let totalExpAll = exp26 > 0 ? exp26 : 1;
+
+            // เรียงลำดับหมวดรายจ่ายจากมากไปน้อย
+            let sortedCats = Object.entries(data.categoryExpenses2569).sort((a,b) => b[1] - a[1]);
+
+            sortedCats.forEach(([cat, val]) => {
+                let valMil = val / 1000000;
+                let share = (val / totalExpAll) * 100;
+                catLabels.push(cat);
+                catValues.push(valMil);
+
+                let tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${cat}</td>
+                    <td>${valMil.toFixed(2)}</td>
+                    <td>${share.toFixed(1)}%</td>
+                `;
+                categoryTableBody.appendChild(tr);
+            });
+
+            if(chartsInstance.category) chartsInstance.category.destroy();
+            chartsInstance.category = new Chart(document.getElementById('categoryChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: catLabels,
+                    datasets: [{
+                        data: catValues,
+                        backgroundColor: ['#FA4616', '#FFC72C', '#7B8189', '#4E555B', '#E67E22', '#F1C40F']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+
+            // เติมข้อมูลสไลด์ 5 (รายการกลับรายการและแจ้งเตือน)
+            let revMonthArr = [];
+            for(let i=1; i<=12; i++) {
+                revMonthArr.push(data.reversalByMonth2569[i] / 1000000);
+            }
+
+            if(chartsInstance.reversal) chartsInstance.reversal.destroy();
+            chartsInstance.reversal = new Chart(document.getElementById('reversalChart'), {
+                type: 'bar',
+                data: {
+                    labels: monthsLabel,
+                    datasets: [{
+                        label: 'มูลค่ากลับรายการ (ล้านบาท)',
+                        data: revMonthArr,
+                        backgroundColor: '#7B8189'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+
+            // แสดงรายงานแจ้งเตือนในกล่องข้อความ
+            let warningBox = document.getElementById('warning-report-box');
+            if(data.warnings.length > 0) {
+                let warnHtml = `<ul style="padding-left: 20px;">`;
+                data.warnings.forEach(w => {
+                    warnHtml += `<li style="margin-bottom: 10px; color: #D9534F;">${w}</li>`;
+                });
+                warnHtml += `</ul>`;
+                warningBox.innerHTML = warnHtml;
+            } else {
+                warningBox.innerHTML = `<p style="color: #28A745; font-weight: bold;">ไม่พบความผิดปกติหรือข้อผิดพลาดในขอบเขตข้อมูลปีงบประมาณนี้</p>`;
+            }
+        }
+
+        // ระบบควบคุมการเปลี่ยนสไลด์ด้วยปุ่มลูกศรบนคีย์บอร์ด
+        document.addEventListener('keydown', function(event) {
+            if(document.getElementById('presentation').style.display === 'block') {
+                if(event.key === 'ArrowRight' || event.key === 'PageDown') {
+                    if(currentSlide < totalSlides) {
+                        currentSlide++;
+                        updateSlideView();
+                    }
+                } else if(event.key === 'ArrowLeft' || event.key === 'PageUp') {
+                    if(currentSlide > 1) {
+                        currentSlide--;
+                        updateSlideView();
+                    }
+                }
+            }
+        });
+
+        function updateSlideView() {
+            for(let i=1; i<=totalSlides; i++) {
+                const slideElem = document.getElementById(`slide-${i}`);
+                if(i === currentSlide) {
+                    slideElem.classList.add('active');
+                } else {
+                    slideElem.classList.remove('active');
+                }
+            }
+        }
+    </script>
+</body>
+</html>
